@@ -214,7 +214,19 @@
     '(clojure.spec.alpha/coll-of clojure.core/int? :kind clojure.core/vector?)
 
     (s/coll-of int? :gen #(gen/return [1 2]))
-    '(clojure.spec.alpha/coll-of clojure.core/int? :gen (fn* [] (gen/return [1 2])))))
+    '(clojure.spec.alpha/coll-of clojure.core/int? :gen (fn* [] (gen/return [1 2])))
+
+    (s/keys :req [(or)])
+    '(clojure.spec.alpha/keys :req [(or)])
+
+    (s/and (s/keys :req [(or)]))
+    '(clojure.spec.alpha/and (clojure.spec.alpha/keys :req [(or)]))
+
+    (s/or :a (s/keys :req-un [(or ::a)]))
+    '(clojure.spec.alpha/or :a (clojure.spec.alpha/keys :req-un [(or ::a)]))
+
+    (s/merge (s/keys :req [(and (or ::a ::b) (or ::c ::d))]))
+    '(clojure.spec.alpha/merge (clojure.spec.alpha/keys :req [(and (or ::a ::b) (or ::c ::d))]))))
 
 (deftest coll-conform-unform
   (check-conform-unform
