@@ -319,11 +319,20 @@
       (conj (walk/postwalk-replace {s '%} form) '[%] 'fn))
     expr))
 
+(defn- unkeys [expr]
+  (if (c/and (seq? expr)
+             (= `keys (first expr))
+             (odd? (count expr)))
+    (list* (first expr) (mapcat (fn [[k v]]
+                                  [k (walk/postwalk #(if (symbol? %) (symbol (name %)) %) v)])
+                                (partition 2 (rest expr))))
+    expr))
+
 (defn- res [form]
   (cond
    (keyword? form) form
    (symbol? form) (c/or (-> form resolve ->sym) form)   
-   (sequential? form) (walk/postwalk #(if (symbol? %) (res %) %) (unfn form))
+   (sequential? form) (walk/postwalk #(if (symbol? %) (res %) (unkeys %)) (unfn form))
    :else form))
 
 (defn ^:skip-wiki def-impl
