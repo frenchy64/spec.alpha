@@ -32,6 +32,8 @@
     (= m1 m2)))
 
 (deftest conform-explain
+  (s/def ::a nat-int?)
+  (s/def ::b boolean?)
   (let [a (s/and #(> % 5) #(< % 10))
         o (s/or :s string? :k keyword?)
         c (s/cat :a string? :b keyword?)
@@ -50,13 +52,17 @@
         lrange (s/int-in 7 42)
         drange (s/double-in :infinite? false :NaN? false :min 3.1 :max 3.2)
         irange (s/inst-in #inst "1939" #inst "1946")
+        flat-keys (s/keys* :req [::a] :opt [::b])
+        flat-keys-trailing (s/keys* :trailing true
+                                    :req [::a] :opt [::b])
         ]
     (are [spec x conformed ed]
       (let [co (result-or-ex (s/conform spec x))
             e (result-or-ex (::s/problems (s/explain-data spec x)))]
         (when (not= conformed co) (println "conform fail\n\texpect=" conformed "\n\tactual=" co))
         (when (not (every? true? (map submap? ed e)))
-          (println "explain failures\n\texpect=" ed "\n\tactual failures=" e "\n\tsubmap?=" (map submap? ed e)))
+          (println "row:" (pr-str '[spec x conformed ed]))
+          (println "explain failures\n\texpect=" (pr-str ed) "\n\tactual failures=" (pr-str e) "\n\tsubmap?=" (map submap? ed e)))
         (and (= conformed co) (every? true? (map submap? ed e))))
 
       lrange 7 7 nil
@@ -158,6 +164,24 @@
       coll [:a :b] [:a :b] nil
       coll (map identity [:a :b]) '(:a :b) nil
       ;;coll [:a "b"] ::s/invalid '[{:pred (coll-checker keyword?), :val [:a b]}]
+
+      flat-keys [::a 1 ::b true] {::a 1 ::b true} nil
+      flat-keys [::b true] ::s/invalid '[{:path [], :pred (clojure.core/fn [%] (clojure.core/contains? % :clojure.test-clojure.spec/a))
+                                          :val {::b true}, :via [], :in []}]
+      flat-keys [::a 1 {::b true}] ::s/invalid '[{:path [:clojure.spec.alpha/k], :pred clojure.core/keyword?, :val {::b true}, :via [], :in [2]}]
+
+      flat-keys-trailing [::a 1 ::b true] {::a 1 ::b true} nil
+      flat-keys-trailing [::b true] ::s/invalid '[{:path [], :pred (clojure.core/fn [%] (clojure.core/contains? % ::a))
+                                                   :val {::b true}, :via [], :in []}]
+      flat-keys-trailing [::a 1 [::b true]] {::a 1 ::b true} nil
+      flat-keys-trailing [::a 1 [::b true]] {::a 1 ::b true} nil
+      flat-keys-trailing [::a 1 []] ::s/invalid '[{:reason "Extra input" :in [2]}]
+
+      flat-keys-trailing [::a 1 ::b true nil] {::a 1 ::b true} nil
+      flat-keys-trailing [{::a 1}] {::a 1} nil
+      flat-keys-trailing [{::b true}] ::s/invalid '[{:path [], :pred (clojure.core/fn [%] (clojure.core/contains? % ::a))
+                                                     :val {::b true}, :via [], :in [0]}]
+      flat-keys-trailing [::b true {::a 1}] {::a 1 ::b true} nil
       )))
 
 (deftest describing-evaled-specs

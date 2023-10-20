@@ -1792,6 +1792,11 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; non-primitives ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (clojure.spec.alpha/def ::kvs->map (conformer #(zipmap (map ::k %) (map ::v %)) #(map (fn [[k v]] {::k k ::v v}) %)))
+(clojure.spec.alpha/def ::trailing-kvs->map (conformer (fn [{:keys [leading trailing]}]
+                                                         (cond-> (zipmap (map ::k leading)
+                                                                         (map ::v leading))
+                                                           trailing (conj (second trailing))))
+                                                       #(hash-map :leading (map (fn [[k v]] {::k k ::v v}) %))))
 
 (defmacro keys*
   "takes the same arguments as spec/keys and returns a regex op that matches sequences of key/values,
@@ -1806,11 +1811,25 @@
   the resulting regex op can be composed into a larger regex:
 
   user=> (s/conform (s/cat :i1 integer? :m (s/keys* :req-un [::a ::c]) :i2 integer?) [42 :a 1 :c 2 :d 4 99])
+  {:i1 42, :m {:a 1, :c 2, :d 4}, :i2 99}
+  
+  if :trailing true is provided, an optional trailing conjable value is also allowed.
+  user=> (s/conform (s/cat :i1 integer? :m (s/keys* :req-un [::a ::c] :trailing true) :i2 integer?) [42 :a 1 {:c 2 :d 4} 99])
   {:i1 42, :m {:a 1, :c 2, :d 4}, :i2 99}"
-  [& kspecs]
-  `(let [mspec# (keys ~@kspecs)]
-     (with-gen (clojure.spec.alpha/& (* (cat ::k keyword? ::v any?)) ::kvs->map mspec#)
-       (fn [] (gen/fmap (fn [m#] (apply concat m#)) (gen mspec#))))))
+  [& {:keys [trailing] :as kspecs}]
+  (let [kspecs (dissoc kspecs :trailing)
+        mspec (gensym "mspec")]
+    `(let [~mspec (keys ~@(mapcat identity kspecs))]
+       (with-gen (let [~'mspec ~mspec] ;; avoid gensym in spec form
+                   ~(if trailing
+                      `(clojure.spec.alpha/& (cat :leading (* (cat ::k keyword? ::v any?))
+                                                  :trailing (? (alt :map (map-of keyword? any?)
+                                                                    :vector (tuple keyword? any?)
+                                                                    :nil nil?)))
+                                             ::trailing-kvs->map
+                                             ~'mspec)
+                      `(clojure.spec.alpha/& (* (cat ::k keyword? ::v any?)) ::kvs->map ~'mspec)))
+         (fn [] (gen/fmap (fn [m#] (apply concat m#)) (gen ~mspec)))))))
 
 (defn ^:skip-wiki nonconforming
   "takes a spec and returns a spec that has the same properties except
